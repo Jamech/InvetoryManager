@@ -6,16 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class FoodPurchaseApp extends JFrame {
+public class FoodStockManager extends JFrame {
     private JTextField searchField;
     private JTextField quantityField;
-    private JButton buyButton;
+    private JButton buyButton, restockButton;
     private JList<String> foodList;
     private DefaultListModel<String> listModel;
     private JLabel messageLabel;
     private List<FoodItem> allItems;
 
-    // Food item model
     static class FoodItem {
         String name;
         double price;
@@ -33,13 +32,13 @@ public class FoodPurchaseApp extends JFrame {
         }
     }
 
-    public FoodPurchaseApp() {
-        setTitle("Food Stock & Purchase System");
+    public FoodStockManager() {
+        setTitle("Food Stock & Purchase Manager");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(550, 500);
+        setSize(600, 500);
         setLayout(new BorderLayout(10, 10));
 
-        // ==== TOP PANEL ====
+        // === TOP PANEL ===
         JPanel topPanel = new JPanel(new GridLayout(2, 1, 5, 5));
         searchField = new JTextField();
         searchField.setToolTipText("Search for a food item...");
@@ -47,27 +46,33 @@ public class FoodPurchaseApp extends JFrame {
         topPanel.add(searchField);
         add(topPanel, BorderLayout.NORTH);
 
-        // ==== CENTER PANEL ====
+        // === CENTER (LIST) ===
         listModel = new DefaultListModel<>();
         foodList = new JList<>(listModel);
         foodList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         add(new JScrollPane(foodList), BorderLayout.CENTER);
 
-        // ==== BOTTOM PANEL ====
+        // === BOTTOM PANEL ===
         JPanel bottomPanel = new JPanel(new GridLayout(3, 1, 5, 5));
-        JPanel inputPanel = new JPanel();
-        inputPanel.add(new JLabel("Enter Quantity:"));
+
+        // Quantity + Buttons
+        JPanel actionPanel = new JPanel();
+        actionPanel.add(new JLabel("Quantity:"));
         quantityField = new JTextField(5);
-        inputPanel.add(quantityField);
-        buyButton = new JButton("Buy Selected Item");
-        inputPanel.add(buyButton);
-        bottomPanel.add(inputPanel);
+        actionPanel.add(quantityField);
+
+        buyButton = new JButton("Buy");
+        restockButton = new JButton("Restock");
+        actionPanel.add(buyButton);
+        actionPanel.add(restockButton);
+        bottomPanel.add(actionPanel);
 
         messageLabel = new JLabel(" ", SwingConstants.CENTER);
         bottomPanel.add(messageLabel);
+
         add(bottomPanel, BorderLayout.SOUTH);
 
-        // ==== FOOD ITEMS ====
+        // === INITIAL ITEMS ===
         allItems = new ArrayList<>();
         allItems.add(new FoodItem("Apple", 1.20, 3));
         allItems.add(new FoodItem("Banana", 0.80, 2));
@@ -82,67 +87,105 @@ public class FoodPurchaseApp extends JFrame {
 
         refreshList(allItems);
 
-        // ==== SEARCH LISTENER ====
+        // === SEARCH LISTENER ===
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { filterList(); }
             public void removeUpdate(DocumentEvent e) { filterList(); }
             public void changedUpdate(DocumentEvent e) { filterList(); }
         });
 
-        // ==== BUY BUTTON LOGIC ====
-        buyButton.addActionListener(e -> processPurchase());
+        // === BUTTON ACTIONS ===
+        buyButton.addActionListener(e -> handlePurchase());
+        restockButton.addActionListener(e -> handleRestock());
 
         setVisible(true);
     }
 
-    private void processPurchase() {
+    // === Handle Buying ===
+    private void handlePurchase() {
         int index = foodList.getSelectedIndex();
         if (index < 0) {
-            messageLabel.setText("⚠️ Please select an item first.");
+            messageLabel.setText("⚠️ Select an item to buy.");
             return;
         }
 
-        String quantityText = quantityField.getText().trim();
-        if (quantityText.isEmpty()) {
-            messageLabel.setText("⚠️ Enter how many items you want to buy.");
+        String qtyText = quantityField.getText().trim();
+        if (qtyText.isEmpty()) {
+            messageLabel.setText("⚠️ Enter quantity to buy.");
             return;
         }
 
         try {
-            int needed = Integer.parseInt(quantityText);
+            int needed = Integer.parseInt(qtyText);
             if (needed <= 0) {
-                messageLabel.setText("⚠️ Quantity must be greater than zero.");
+                messageLabel.setText("⚠️ Enter a number greater than 0.");
                 return;
             }
 
-            String selectedItemText = foodList.getSelectedValue();
-            FoodItem selectedItem = findItemByDisplay(selectedItemText);
+            FoodItem selected = findSelectedItem();
+            if (selected == null) return;
 
-            if (selectedItem == null) return;
-
-            if (needed > selectedItem.quantity) {
-                messageLabel.setText("❌ Not enough stock for " + selectedItem.name + ".");
+            if (needed > selected.quantity) {
+                messageLabel.setText("❌ Not enough stock for " + selected.name + ".");
                 return;
             }
 
-            double totalCost = needed * selectedItem.price;
-            selectedItem.quantity -= needed;
+            double totalCost = needed * selected.price;
+            selected.quantity -= needed;
 
-            messageLabel.setText("✅ You bought " + needed + " " + selectedItem.name +
+            messageLabel.setText("✅ Bought " + needed + " " + selected.name +
                     " for $" + String.format("%.2f", totalCost) +
-                    ". Remaining stock: " + selectedItem.quantity);
+                    ". Remaining: " + selected.quantity);
 
             refreshList(allItems);
             quantityField.setText("");
 
         } catch (NumberFormatException ex) {
-            messageLabel.setText("⚠️ Invalid quantity. Enter a number.");
+            messageLabel.setText("⚠️ Enter a valid number.");
         }
     }
 
-    private FoodItem findItemByDisplay(String text) {
+    // === Handle Restocking ===
+    private void handleRestock() {
+        int index = foodList.getSelectedIndex();
+        if (index < 0) {
+            messageLabel.setText("⚠️ Select an item to restock.");
+            return;
+        }
+
+        String qtyText = quantityField.getText().trim();
+        if (qtyText.isEmpty()) {
+            messageLabel.setText("⚠️ Enter quantity to restock.");
+            return;
+        }
+
+        try {
+            int addQty = Integer.parseInt(qtyText);
+            if (addQty <= 0) {
+                messageLabel.setText("⚠️ Quantity must be positive.");
+                return;
+            }
+
+            FoodItem selected = findSelectedItem();
+            if (selected == null) return;
+
+            selected.quantity += addQty;
+            messageLabel.setText("🔄 Restocked " + selected.name +
+                    " by " + addQty + " units. New stock: " + selected.quantity);
+
+            refreshList(allItems);
+            quantityField.setText("");
+
+        } catch (NumberFormatException ex) {
+            messageLabel.setText("⚠️ Invalid number for restock.");
+        }
+    }
+
+    private FoodItem findSelectedItem() {
+        String selectedText = foodList.getSelectedValue();
+        if (selectedText == null) return null;
         for (FoodItem item : allItems) {
-            if (text.contains(item.name)) return item;
+            if (selectedText.contains(item.name)) return item;
         }
         return null;
     }
@@ -163,6 +206,6 @@ public class FoodPurchaseApp extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(FoodPurchaseApp::new);
+        SwingUtilities.invokeLater(FoodStockManager::new);
     }
 }
